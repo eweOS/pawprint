@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.09.30
+ *	Date:2022.10.04
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -18,6 +18,8 @@
 #include<fcntl.h>
 #include<sys/stat.h>
 #include<dirent.h>
+#include<pwd.h>
+#include<grp.h>
 
 #if defined(CONF_TARGET_X86_64)
 	#define TARGET_PLATFORM "x86-64"
@@ -37,6 +39,11 @@ static struct {
 	int noPrefixCount;
 } gArg;
 
+/*
+ *	NOTE:
+ *		Remember to check parse_conf if these macros are changed
+ *		Handlers are executed from the lowest bit to the highest
+ */
 #define s(k) (1 << (k))
 #define ATTR_FILE		s(0)		// File or directory
 #define ATTR_CREATE		s(1)		// Create or fail
@@ -47,6 +54,8 @@ static struct {
 #define ATTR_NOSYM		s(6)		// Do not follow symlink
 #define ATTR_RECUR		s(7)		// Recusively
 #define ATTR_WRITE		s(8)		// Write message
+#define ATTR_OWNERSHIP		s(9)		// Adjust ownership
+						// both group and user
 
 typedef uint32_t Entry_Attribute;
 
@@ -58,7 +67,7 @@ typedef struct {
 /*	Log  Macros	*/
 // For default,print log to stderr
 FILE *gLogStream;
-#define log_error(...) (fprintf(gLog,"[Error]:" __VA_ARGS__))
+#define log_error(...) (fprintf(gLogStream,"[Error]:" __VA_ARGS__))
 #define log_warn(...)  (fprintf(gLogStream,"[Warning]:"  __VA_ARGS__))
 #define check(assertion,...) do {					\
 	if (!(assertion)) {						\
@@ -99,6 +108,23 @@ static void next_line(FILE *fp)
 	return;
 }
 
+static void free_if(int num,...)
+{
+	va_list arg;
+	va_start(arg,num);
+	void *p;
+
+	while (num) {
+		p = va_arg(arg,void *);
+		if (p)
+			free(p);
+		num--;
+	}
+
+	va_end(arg);
+	return;
+}
+
 static int is_valid_file(const char *path)
 {
 	struct stat t;
@@ -110,7 +136,75 @@ static int is_valid_file(const char *path)
 					    const char *grpName,	      \
 					    const char *age,const char *arg)
 #define handler_ignore (void)path;(void)mode;(void)userName;(void)grpName;    \
-		       (void)age;(void)arg
+		       (void)age;(void)arg;
+
+def_handler(attr_create)
+{
+	handler_ignore;
+
+	if (!is_valid_file(path)) {
+		int fd = open(path,O_CREAT | O_WRONLY);
+		if (fd < 0) {
+			log_warn("Cannot create file %s\n",path);
+			return;
+		}
+		close(fd);
+	}
+	return;
+}
+
+def_handler(attr_perm)
+{
+	handler_ignore;
+
+	if (mode[0] == '-' || !mode[0])		// Simply ignore
+		return;
+
+	if (chmod(path,(mode_t)strtol(mode,NULL,8)))
+		log_warn("Cannot set file mode as %s for %s\n",mode,path);
+
+	return;
+}
+
+static void adjust_user(const char *path,const char *user)
+{
+	if (user[0] == '-' || !user[0])		// Ignore
+		return;
+
+	struct passwd *pswd = getpwnam(user);
+	if (!pswd) {
+		log_warn("Invalid user %s\n",user);
+		return;
+	}
+
+	if (chown(path,pswd->pw_uid,-1))
+		log_warn("Cannot transfer file %s to user %s",path,user);
+	return;
+}
+
+static void adjust_group(const char *path,const char *group)
+{
+	if (group[0] == '-' || !group[0])
+		return;
+
+	struct group *grpInfo = getgrnam(group);
+	if (!grpInfo) {
+		log_warn("Invalid group %s\n",group);
+		return;
+	}
+
+	if (chown(path,-1,grpInfo->gr_gid))
+		log_warn("Cannot transfer file %s to group %s\n",path,group);
+	return;
+}
+
+def_handler(attr_ownership)
+{
+	handler_ignore;
+	adjust_user(path,userName);
+	adjust_group(path,grpName);
+	return;
+}
 
 def_handler(attr_write)
 {
@@ -145,11 +239,12 @@ static void parse_conf(FILE *conf)
 {
 	static Entry_Attribute attrTableSet[256] = {
 			['w']	= ATTR_WRITE,
-			['+']	= ATTR_APPEND,
+			['f']	= ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP |
+				  ATTR_PERM,
 			['!']	= ATTR_ONBOOT,
 		};
 	static Entry_Attribute attrTableClear[] = {
-			['+']	= ATTR_WRITE
+			['+']	= ATTR_WRITE,
 		};
 
 	typedef void (*Attr_Handler)(const char *path,const char *mode,
@@ -157,7 +252,10 @@ static void parse_conf(FILE *conf)
 				     const char *age,const char *arg);
 	static Attr_Handler attrHandler[] =
 		{
+			[1]	= attr_create,
+			[4]	= attr_perm,
 			[8]	= attr_write,
+			[9]	= attr_ownership,
 		};
 
 	while (!feof(conf)) {
@@ -194,23 +292,22 @@ static void parse_conf(FILE *conf)
 			attr &= ~attrTableClear[(int)p[i]];
 		}
 
+		if ((attr & ATTR_ONBOOT) && !gArg.boot)	// Handler '!'
+			continue;
+
 		for (int i = 0,mask = 1;
 		     (size_t)i < (sizeof(attr) << 3) - 1;
 		     i++) {
 			if (attr & mask) {
-				attrHandler[i](pathStr,userName,grpName,
-					       modeStr,ageStr,skip_space(arg));
+				attrHandler[i](pathStr,modeStr,userName,
+					       grpName,ageStr,skip_space(arg));
 			}
 			mask <<= 1;
 		}
 
-		free(typeStr);
-		free(pathStr);
-		free(modeStr);
-		free(userName);
-		free(grpName);
-		free(ageStr);
+		free_if(6,typeStr,pathStr,modeStr,userName,grpName,ageStr);
 	}
+
 	return;
 }
 
