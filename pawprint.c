@@ -48,14 +48,16 @@ static struct {
 #define ATTR_FILE		s(0)		// File or directory
 #define ATTR_CREATE		s(1)		// Create or fail
 #define ATTR_APPEND		s(2)		// Append or not
-#define ATTR_ONBOOT		s(3)		// On --boot only
+
 #define ATTR_PERM		s(4)		// Adjust permission
-#define ATTR_GLOB		s(5)		// Need to be expand
+#define ATTR_CREATEDIR		s(5)		// Create directory
 #define ATTR_NOSYM		s(6)		// Do not follow symlink
 #define ATTR_RECUR		s(7)		// Recusively
 #define ATTR_WRITE		s(8)		// Write message
 #define ATTR_OWNERSHIP		s(9)		// Adjust ownership
 						// both group and user
+#define ATTR_ONBOOT		s(30)		// On --boot only
+#define ATTR_GLOB		s(31)		// Need to be expanded
 
 typedef uint32_t Entry_Attribute;
 
@@ -138,6 +140,17 @@ static int is_valid_file(const char *path)
 #define handler_ignore (void)path;(void)mode;(void)userName;(void)grpName;    \
 		       (void)age;(void)arg;
 
+def_handler(attr_createdir)
+{
+	handler_ignore;
+
+	if (!is_valid_file(path)) {
+		if (mkdir(path,0777))
+			log_warn("Cannot create directory %s\n",path);
+	}
+	return;
+}
+
 def_handler(attr_create)
 {
 	handler_ignore;
@@ -198,6 +211,20 @@ static void adjust_group(const char *path,const char *group)
 	return;
 }
 
+/*
+ *	NOTE: Assuming that the file exists
+ */
+static time_t get_last_time(const char *path)
+{
+	struct stat t;
+
+	stat(path,&t);
+
+	time_t lastChange = t.st_atim.tv_sec > t.st_mtim.tv_sec ?
+					t.st_atim.tv_sec : t.st_mtim.tv_sec;
+	return lastChange > t.st_ctim.tv_sec ? lastChange : t.st_ctim.tv_sec;
+}
+
 def_handler(attr_ownership)
 {
 	handler_ignore;
@@ -241,6 +268,7 @@ static void parse_conf(FILE *conf)
 			['w']	= ATTR_WRITE,
 			['f']	= ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP |
 				  ATTR_PERM,
+			['d']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM,
 			['!']	= ATTR_ONBOOT,
 		};
 	static Entry_Attribute attrTableClear[] = {
@@ -254,6 +282,7 @@ static void parse_conf(FILE *conf)
 		{
 			[1]	= attr_create,
 			[4]	= attr_perm,
+			[5]	= attr_createdir,
 			[8]	= attr_write,
 			[9]	= attr_ownership,
 		};
@@ -334,10 +363,12 @@ static void usage(const char *name)
 
 int main(int argc,const char *argv[])
 {
+	(void)get_last_time;
 	if (argc == 1) {
 		usage(argv[0]);
 		return -1;
 	}
+	memset(&gArg,255,sizeof(gArg));
 	(void)iterate_dir;
 	(void)gArg;
 	gLogStream = stderr;
