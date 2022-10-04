@@ -12,6 +12,8 @@
 #include<string.h>
 #include<stdint.h>
 #include<errno.h>
+#include<time.h>
+#include<stdbool.h>
 
 #include<unistd.h>
 #include<sys/types.h>
@@ -56,6 +58,8 @@ static struct {
 #define ATTR_WRITE		s(8)		// Write message
 #define ATTR_OWNERSHIP		s(9)		// Adjust ownership
 						// both group and user
+#define ATTR_CLEAN		s(10)		// Need to be cleaned
+#define ATTR_REMOVE		s(11)		// Need to be removed
 #define ATTR_ONBOOT		s(30)		// On --boot only
 #define ATTR_GLOB		s(31)		// Need to be expanded
 
@@ -78,24 +82,6 @@ FILE *gLogStream;
 	}								\
 	while(0)
 #define checkl(cond,log,...) ((void)(cond ? 0 : log_warn(log,__VA_ARGS__)))
-
-static void iterate_dir(const char *path,void (*callback)(const char *path,
-							  void *ctx),
-			void *ctx)
-{
-	DIR *root = opendir(path);
-	if (!root) {
-		log_warn("Cannot open directory %s\n",path);
-		return;
-	}
-
-	for (struct dirent *dir = readdir(root);dir;dir = readdir(root))
-		callback(dir->d_name,ctx);
-
-	closedir(root);
-
-	return;
-}
 
 static const char *skip_space(const char *p)
 {
@@ -133,12 +119,112 @@ static int is_valid_file(const char *path)
 	return !stat(path,&t);
 }
 
+/*
+ *	NOTE: Assuming that the file exists
+ */
+static time_t get_last_time(const char *path)
+{
+	struct stat t;
+
+	stat(path,&t);
+
+	time_t lastChange = t.st_atim.tv_sec > t.st_mtim.tv_sec ?
+					t.st_atim.tv_sec : t.st_mtim.tv_sec;
+	return lastChange > t.st_ctim.tv_sec ? lastChange : t.st_ctim.tv_sec;
+}
+
+static int is_directory(const char *path)
+{
+	struct stat t;
+
+	if (stat(path,&t)) {
+		log_warn("Cannot get the status of file %s",path);
+		return 0;
+	}
+
+	return S_ISDIR(t.st_mode);
+}
+
+static void iterate_directory(const char *path,
+			      void (*callback)(const char *path,void *ctx),
+			      void *ctx,bool r)
+{
+	DIR *root = opendir(path);
+	if (!root) {
+		log_warn("Cannot open directory %s\n",path);
+		return;
+	}
+	chdir(path);
+
+	for (struct dirent *dir = readdir(root);dir;dir = readdir(root)) {
+		if (dir->d_name[0] == '.')
+			continue;
+
+		if (is_directory(dir->d_name) && r) {
+			iterate_directory(dir->d_name,callback,ctx,true);
+		} else {
+			callback(dir->d_name,ctx);
+		}
+	}
+
+	closedir(root);
+	chdir("..");
+
+	return;
+}
+
 #define def_handler(name) static void name (const char *path,const char *mode,\
 					    const char *userName,	      \
 					    const char *grpName,	      \
 					    const char *age,const char *arg)
 #define handler_ignore (void)path;(void)mode;(void)userName;(void)grpName;    \
 		       (void)age;(void)arg;
+
+static time_t convert_age(const char *s)
+{
+	if (!s[0] || s[0] == '-') 		// Skip
+		return (time_t)-1;
+
+	time_t t = 0;
+	for (time_t scale = strtol(s,(char **)&s,0);
+	     *s;scale = strtol(s,(char **)&s,0)) {
+		time_t unit = *s == 'd' ? 86400		:
+			      *s == 'w' ? 604800	:
+			      *s == 'h' ? 3600		:
+			      *s == 'm' ? 60		:
+			      *s == 's' ? 1		:
+					  0;
+		if (!unit)
+			return (time_t)-1;
+		t += unit * scale;
+		s++;
+	}
+
+	return t;
+}
+
+static void clean_file(const char *path,void *ctx)
+{
+	time_t ddl = *(time_t*)ctx;
+	if (get_last_time(path) < ddl) {
+		if (unlink(path))
+			log_warn("Cannot remove file %s\n",path);
+	}
+	return;
+}
+
+def_handler(attr_clean)
+{
+	handler_ignore;
+
+	if (!gArg.clean)
+		return;
+
+	time_t ddl = time(NULL) - convert_age(age);
+	iterate_directory(path,clean_file,&ddl,true);
+
+	return;
+}
 
 def_handler(attr_createdir)
 {
@@ -211,20 +297,6 @@ static void adjust_group(const char *path,const char *group)
 	return;
 }
 
-/*
- *	NOTE: Assuming that the file exists
- */
-static time_t get_last_time(const char *path)
-{
-	struct stat t;
-
-	stat(path,&t);
-
-	time_t lastChange = t.st_atim.tv_sec > t.st_mtim.tv_sec ?
-					t.st_atim.tv_sec : t.st_mtim.tv_sec;
-	return lastChange > t.st_ctim.tv_sec ? lastChange : t.st_ctim.tv_sec;
-}
-
 def_handler(attr_ownership)
 {
 	handler_ignore;
@@ -268,7 +340,8 @@ static void parse_conf(FILE *conf)
 			['w']	= ATTR_WRITE,
 			['f']	= ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP |
 				  ATTR_PERM,
-			['d']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM,
+			['d']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
+				  ATTR_CLEAN,
 			['!']	= ATTR_ONBOOT,
 		};
 	static Entry_Attribute attrTableClear[] = {
@@ -285,6 +358,7 @@ static void parse_conf(FILE *conf)
 			[5]	= attr_createdir,
 			[8]	= attr_write,
 			[9]	= attr_ownership,
+			[10]	= attr_clean,
 		};
 
 	while (!feof(conf)) {
@@ -369,7 +443,6 @@ int main(int argc,const char *argv[])
 		return -1;
 	}
 	memset(&gArg,255,sizeof(gArg));
-	(void)iterate_dir;
 	(void)gArg;
 	gLogStream = stderr;
 	int confIdx = 1;
