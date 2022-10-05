@@ -351,6 +351,15 @@ def_handler(attr_write)
 	return;
 }
 
+def_handler(attr_remove)
+{
+	handler_ignore;
+
+	remove(path);
+
+	return;
+}
+
 typedef struct {
 	Entry_Attribute attr;
 	const char *modeStr,*userName,*grpName,*ageStr,*arg;
@@ -374,6 +383,7 @@ static void process_file(const char *path,void *ctx)
 			[8]	= attr_write,
 			[9]	= attr_ownership,
 			[10]	= attr_clean,
+			[11]	= attr_remove,
 		};
 
 	Process_File_In *in = ctx;
@@ -403,6 +413,7 @@ static void parse_conf(FILE *conf)
 			['d']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
 				  ATTR_CLEAN,
 			['!']	= ATTR_ONBOOT,
+			['r']	= ATTR_REMOVE | ATTR_GLOB,
 		};
 	static Entry_Attribute attrTableClear[] = {
 			['+']	= ATTR_WRITE,
@@ -425,10 +436,8 @@ static void parse_conf(FILE *conf)
 		}
 
 		char arg[256];	// FIXME: Fixed max length
-		const char *ret = fgets(arg,256,conf);
-		if (!ret)
-			break;
-		size_t argLength = strlen(ret);
+		fgets(arg,256,conf);
+		size_t argLength = strlen(arg);
 		if (arg[argLength- 1] == '\n') {
 			arg[argLength - 1] = '\0';
 			argLength--;
@@ -446,14 +455,15 @@ static void parse_conf(FILE *conf)
 			continue;
 
 		Process_File_In in = {
-					.attr		= attr,
+					.attr		= attr & ~ATTR_ONBOOT &
+							  ~ATTR_GLOB,
 					.modeStr	= modeStr,
 					.userName	= userName,
 					.grpName	= grpName,
 					.ageStr		= ageStr,
 					.arg		= skip_space(arg),
 				     };
-		if (attr & ATTR_GLOB) {	// Disable glob matching
+		if (attr & ATTR_GLOB) {
 			glob_match(pathStr,process_file,(void*)&in);
 		} else {
 			process_file(pathStr,(void*)&in);
