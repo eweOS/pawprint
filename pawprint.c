@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.04
+ *	Date:2022.10.06
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -22,6 +22,7 @@
 #include<dirent.h>
 #include<pwd.h>
 #include<grp.h>
+#include<glob.h>
 
 #if defined(CONF_TARGET_X86_64)
 	#define TARGET_PLATFORM "x86-64"
@@ -169,6 +170,25 @@ static void iterate_directory(const char *path,
 
 	closedir(root);
 	chdir("..");
+
+	return;
+}
+
+static void glob_match(const char *pattern,
+		       void (*callback)(const char *path,void *ctx),
+		       void *ctx)
+{
+	glob_t buf;
+
+	if (glob(pattern,GLOB_NOSORT,NULL,&buf)) {
+		log_warn("Cannot match files with glob %s",pattern);
+		return;
+	}
+
+	for (size_t i = 0;i < buf.gl_pathc;i++)
+		callback(buf.gl_pathv[i],ctx);
+
+	globfree(&buf);
 
 	return;
 }
@@ -331,6 +351,46 @@ def_handler(attr_write)
 	return;
 }
 
+typedef struct {
+	Entry_Attribute attr;
+	const char *modeStr,*userName,*grpName,*ageStr,*arg;
+} Process_File_In;
+
+/*
+ *	The order in array ctx is important:
+ *		attr,modeStr,userName,grpName,age,arg
+ *	All are in the same size as a normal pointer
+ */
+static void process_file(const char *path,void *ctx)
+{
+	typedef void (*Attr_Handler)(const char *path,const char *mode,
+				     const char *userName,const char *grpName,
+				     const char *age,const char *arg);
+	static Attr_Handler attrHandler[] =
+		{
+			[1]	= attr_create,
+			[4]	= attr_perm,
+			[5]	= attr_createdir,
+			[8]	= attr_write,
+			[9]	= attr_ownership,
+			[10]	= attr_clean,
+		};
+
+	Process_File_In *in = ctx;
+
+	for (int i = 0,mask = 1;
+	     (size_t)i < (sizeof(in->attr) << 3) - 1;
+	     i++) {
+		if (in->attr & mask) {
+			attrHandler[i](path,in->modeStr,in->userName,
+				       in->grpName,in->ageStr,in->arg);
+		}
+		mask <<= 1;
+	}
+
+	return;
+}
+
 /*
  *	NOTICE: Glob match will be done in parse_conf()
  */
@@ -346,19 +406,6 @@ static void parse_conf(FILE *conf)
 		};
 	static Entry_Attribute attrTableClear[] = {
 			['+']	= ATTR_WRITE,
-		};
-
-	typedef void (*Attr_Handler)(const char *path,const char *mode,
-				     const char *userName,const char *grpName,
-				     const char *age,const char *arg);
-	static Attr_Handler attrHandler[] =
-		{
-			[1]	= attr_create,
-			[4]	= attr_perm,
-			[5]	= attr_createdir,
-			[8]	= attr_write,
-			[9]	= attr_ownership,
-			[10]	= attr_clean,
 		};
 
 	while (!feof(conf)) {
@@ -398,14 +445,18 @@ static void parse_conf(FILE *conf)
 		if ((attr & ATTR_ONBOOT) && !gArg.boot)	// Handler '!'
 			continue;
 
-		for (int i = 0,mask = 1;
-		     (size_t)i < (sizeof(attr) << 3) - 1;
-		     i++) {
-			if (attr & mask) {
-				attrHandler[i](pathStr,modeStr,userName,
-					       grpName,ageStr,skip_space(arg));
-			}
-			mask <<= 1;
+		Process_File_In in = {
+					.attr		= attr,
+					.modeStr	= modeStr,
+					.userName	= userName,
+					.grpName	= grpName,
+					.ageStr		= ageStr,
+					.arg		= skip_space(arg),
+				     };
+		if (attr & ATTR_GLOB) {	// Disable glob matching
+			glob_match(pathStr,process_file,(void*)&in);
+		} else {
+			process_file(pathStr,(void*)&in);
 		}
 
 		free_if(6,typeStr,pathStr,modeStr,userName,grpName,ageStr);
