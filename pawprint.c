@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.06
+ *	Date:2022.10.07
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -36,6 +36,7 @@ static struct {
 	int boot:1;
 	int clean:1;
 	int create:1;
+	int remove:1;
 	char *prefixList;
 	int prefixCount;
 	char *noPrefixList;
@@ -146,9 +147,9 @@ static int is_directory(const char *path)
 	return S_ISDIR(t.st_mode);
 }
 
-static void iterate_directory(const char *path,
-			      void (*callback)(const char *path,void *ctx),
-			      void *ctx,bool r)
+static void iterate_directory_sub(const char *path,
+				  void (*callback)(const char *path,void *ctx),
+				  void *ctx,bool r,bool top)
 {
 	DIR *root = opendir(path);
 	if (!root) {
@@ -162,7 +163,8 @@ static void iterate_directory(const char *path,
 			continue;
 
 		if (is_directory(dir->d_name) && r) {
-			iterate_directory(dir->d_name,callback,ctx,true);
+			iterate_directory_sub(dir->d_name,callback,
+					      ctx,true,false);
 		} else {
 			callback(dir->d_name,ctx);
 		}
@@ -171,7 +173,17 @@ static void iterate_directory(const char *path,
 	closedir(root);
 	chdir("..");
 
+	if (!top)
+		callback(path,ctx);
+
 	return;
+}
+
+static void iterate_directory(const char *path,
+			      void (*callback)(const char *path,void *ctx),
+			      void *ctx,bool r)
+{
+	iterate_directory_sub(path,callback,ctx,r,true);
 }
 
 static void glob_match(const char *pattern,
@@ -181,7 +193,7 @@ static void glob_match(const char *pattern,
 	glob_t buf;
 
 	if (glob(pattern,GLOB_NOSORT,NULL,&buf)) {
-		log_warn("Cannot match files with glob %s",pattern);
+		log_warn("Cannot match files with glob %s\n",pattern);
 		return;
 	}
 
@@ -227,7 +239,7 @@ static void clean_file(const char *path,void *ctx)
 {
 	time_t ddl = *(time_t*)ctx;
 	if (get_last_time(path) < ddl) {
-		if (unlink(path))
+		if (remove(path))
 			log_warn("Cannot remove file %s\n",path);
 	}
 	return;
@@ -351,11 +363,25 @@ def_handler(attr_write)
 	return;
 }
 
+static void do_remove(const char *path,void *in)
+{
+	(void)in;
+	remove(path);
+	return;
+}
+
 def_handler(attr_remove)
 {
 	handler_ignore;
 
-	remove(path);
+	if (!gArg.remove)
+		return;
+
+	if (is_directory(path)) {
+		iterate_directory(path,do_remove,NULL,true);
+	} else {
+		do_remove(path,NULL);
+	}
 
 	return;
 }
@@ -414,6 +440,8 @@ static void parse_conf(FILE *conf)
 				  ATTR_CLEAN,
 			['!']	= ATTR_ONBOOT,
 			['r']	= ATTR_REMOVE | ATTR_GLOB,
+			['D']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
+				  ATTR_CLEAN | ATTR_REMOVE,
 		};
 	static Entry_Attribute attrTableClear[] = {
 			['+']	= ATTR_WRITE,
@@ -454,13 +482,18 @@ static void parse_conf(FILE *conf)
 		if ((attr & ATTR_ONBOOT) && !gArg.boot)	// Handler '!'
 			continue;
 
+		char dummy[1] = "";
 		Process_File_In in = {
 					.attr		= attr & ~ATTR_ONBOOT &
 							  ~ATTR_GLOB,
-					.modeStr	= modeStr,
-					.userName	= userName,
-					.grpName	= grpName,
-					.ageStr		= ageStr,
+					.modeStr	= modeStr ? modeStr :
+								    dummy,
+					.userName	= userName ? userName :
+								     dummy,
+					.grpName	= grpName ? grpName :
+								    dummy,
+					.ageStr		= ageStr ? ageStr :
+								   dummy,
 					.arg		= skip_space(arg),
 				     };
 		if (attr & ATTR_GLOB) {
