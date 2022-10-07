@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.07
+ *	Date:2022.10.08
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -37,6 +37,7 @@ static struct {
 	int clean:1;
 	int create:1;
 	int remove:1;
+	int noDefault:1;
 	char *prefixList;
 	int prefixCount;
 	char *noPrefixList;
@@ -238,7 +239,7 @@ static time_t convert_age(const char *s)
 static void clean_file(const char *path,void *ctx)
 {
 	time_t ddl = *(time_t*)ctx;
-	if (get_last_time(path) < ddl) {
+	if (get_last_time(path) < ddl || gArg.clean) {
 		if (remove(path))
 			log_warn("Cannot remove file %s\n",path);
 	}
@@ -248,9 +249,6 @@ static void clean_file(const char *path,void *ctx)
 def_handler(attr_clean)
 {
 	handler_ignore;
-
-	if (!gArg.clean)
-		return;
 
 	time_t ddl = time(NULL) - convert_age(age);
 	iterate_directory(path,clean_file,&ddl,true);
@@ -531,18 +529,44 @@ static void usage(const char *name)
 
 int main(int argc,const char *argv[])
 {
-	(void)get_last_time;
-	if (argc == 1) {
-		usage(argv[0]);
-		return -1;
-	}
-	memset(&gArg,255,sizeof(gArg));
-	(void)gArg;
 	gLogStream = stderr;
 	int confIdx = 1;
+	for (int i = 1;i < argc;i++) {
+		if (!strcmp(argv[i],"--clean")) {
+			gArg.clean = 1;
+		} else if (!strcmp(argv[i],"--create")) {
+			gArg.create = 1;
+		} else if (!strcmp(argv[i],"--remove")) {
+			gArg.remove = 1;
+		} else if (!strcmp(argv[i],"--boot")) {
+			gArg.boot = 1;
+		} else if (!strcmp(argv[i],"--no-default")) {
+			gArg.noDefault = 1;
+		} else if (!strcmp(argv[i],"--log")) {
+			FILE *t = fopen(argv[i + 1],"a");
+			if (!t)
+				log_warn("Cannot open log file %s\n",
+					 argv[i + 1]);
+			gLogStream = t;
+			i++;
+		} else if (!strcmp(argv[i],"--help") ||
+			   !strcmp(argv[i],"-h")) {
+			usage(argv[0]);
+			return 0;
+		} else {
+			confIdx = i;
+			break;
+		}
+	}
+
+	if (!gArg.noDefault) {
+		(void)1;
+	}
 	/*	Now no options are recognised	*/
 	for (;confIdx < argc;confIdx++)
 		read_conf(argv[confIdx],NULL);
+
+	fclose(gLogStream);
 
 	return 0;
 }
