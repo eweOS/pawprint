@@ -38,8 +38,6 @@ static struct {
 	int create:1;
 	int remove:1;
 	int noDefault:1;
-	char *prefixList;
-	int prefixCount;
 	char *noPrefixList;
 	int noPrefixCount;
 } gArg;
@@ -439,6 +437,10 @@ static void parse_conf(FILE *conf)
 			['!']	= ATTR_ONBOOT,
 			['r']	= ATTR_REMOVE | ATTR_GLOB,
 			['D']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
+				  ATTR_CLEAN | ATTR_REMOVE,
+			['q']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
+				  ATTR_CLEAN,
+			['Q']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
 				  ATTR_CLEAN | ATTR_REMOVE,
 		};
 	static Entry_Attribute attrTableClear[] = {
