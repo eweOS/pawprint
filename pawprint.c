@@ -23,6 +23,8 @@
 #include<pwd.h>
 #include<grp.h>
 #include<glob.h>
+#include<sys/ioctl.h>
+#include<linux/fs.h>
 
 #if defined(CONF_TARGET_X86_64)
 	#define TARGET_PLATFORM "x86-64"
@@ -59,10 +61,11 @@ static struct {
 #define ATTR_WRITE		s(8)		// Write message
 #define ATTR_OWNERSHIP		s(9)		// Adjust ownership
 						// both group and user
-#define ATTR_CLEAN		s(10)		// Need to be cleaned
-#define ATTR_REMOVE		s(11)		// Need to be removed
+#define ATTR_CLEAN		s(10)		// Need cleaning
+#define ATTR_REMOVE		s(11)		// Need removing
+#define ATTR_ATTR		s(12)		// Need setting attribute
 #define ATTR_ONBOOT		s(30)		// On --boot only
-#define ATTR_GLOB		s(31)		// Need to be expanded
+#define ATTR_GLOB		s(31)		// Need expanding
 
 typedef uint32_t Entry_Attribute;
 
@@ -382,6 +385,70 @@ def_handler(attr_remove)
 	return;
 }
 
+static void do_set_file_attr(const char *path,void *in)
+{
+	const char *attr = in;
+
+	int type = 0;
+	if (attr[0] == '+') {
+		type = 1;
+	} else if (attr[0] == '-') {
+		type = 0;
+	} else {
+		log_warn("Invalid file attribute operation %c\n",attr[0]);
+		return;
+	}
+
+	static unsigned long int flags[256] = {
+			['a']	= FS_APPEND_FL,
+			['D']	= FS_DIRSYNC_FL,
+			['i']	= FS_IMMUTABLE_FL,
+			['j']	= FS_JOURNAL_DATA_FL,
+			['A']	= FS_NOATIME_FL,
+			['C']	= FS_NOCOW_FL,
+			['d']	= FS_NODUMP_FL,
+			['t']	= FS_NOTAIL_FL,
+			['P']	= FS_PROJINHERIT_FL,
+			['s']	= FS_SECRM_FL,
+			['S']	= FS_SYNC_FL,
+			['T']	= FS_TOPDIR_FL,
+			['u']	= FS_UNRM_FL,
+		};
+
+	unsigned long int mask = 0;
+	for (int i = 1;attr[i];i++) {
+		if (!flags[(int)attr[i]]) {
+			log_warn("Invalid file attribute %c\n",attr[i]);
+		}
+		mask |= flags[(int)attr[i]];
+	}
+
+	mask = type ? mask : ~mask;
+
+	int origin;
+	int fd = open(path,O_RDONLY);
+	if (fd < 0) {
+		log_warn("Cannot open file %s\n",path);
+		return;
+	}
+
+	ioctl(fd,FS_IOC_GETFLAGS,&origin);
+	origin = type ? origin | mask : origin & ~mask;
+	ioctl(fd,FS_IOC_SETFLAGS,&origin);
+
+	close(fd);
+
+	return;
+}
+
+def_handler(attr_attr)
+{
+	handler_ignore;
+	do_set_file_attr(path,(void*)arg);
+	return;
+}
+
+
 typedef struct {
 	Entry_Attribute attr;
 	const char *modeStr,*userName,*grpName,*ageStr,*arg;
@@ -406,6 +473,7 @@ static void process_file(const char *path,void *ctx)
 			[9]	= attr_ownership,
 			[10]	= attr_clean,
 			[11]	= attr_remove,
+			[12]	= attr_attr,
 		};
 
 	Process_File_In *in = ctx;
@@ -442,6 +510,7 @@ static void parse_conf(FILE *conf)
 				  ATTR_CLEAN,
 			['Q']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
 				  ATTR_CLEAN | ATTR_REMOVE,
+			['h']	= ATTR_ATTR | ATTR_GLOB,
 		};
 	static Entry_Attribute attrTableClear[] = {
 			['+']	= ATTR_WRITE,
