@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.10
+ *	Date:2022.10.11
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -197,7 +197,6 @@ static void glob_match(const char *pattern,
 	glob_t buf;
 
 	if (glob(pattern,GLOB_NOSORT,NULL,&buf)) {
-		log_warn("Cannot match files with glob %s\n",pattern);
 		return;
 	}
 
@@ -667,14 +666,15 @@ int main(int argc,const char *argv[])
 		}
 	}
 
-	if (!gArg.noDefault) {
-		(void)1;
-	}
-
 	gArg.excludedList = malloc(sizeof(char*));
 	gArg.excludedCount = 1;
 	gArg.excludedList[0] = NULL;
 	check(gArg.excludedList,"Cannot allocate memory for excluded path");
+
+	if (!gArg.noDefault) {
+		iterate_directory("/etc/tmpfiles.d",read_conf,NULL,true);
+		iterate_directory("/lib/tmpfiles.d",read_conf,NULL,true);
+	}
 
 	/*	Now no options are recognised	*/
 	for (;confIdx < argc;confIdx++)
