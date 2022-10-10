@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.08
+ *	Date:2022.10.10
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -23,6 +23,7 @@
 #include<pwd.h>
 #include<grp.h>
 #include<glob.h>
+#include<fnmatch.h>
 #include<sys/ioctl.h>
 #include<linux/fs.h>
 
@@ -40,8 +41,8 @@ static struct {
 	int create:1;
 	int remove:1;
 	int noDefault:1;
-	char *noPrefixList;
-	int noPrefixCount;
+	char **excludedList;
+	int excludedCount;
 } gArg;
 
 /*
@@ -64,6 +65,8 @@ static struct {
 #define ATTR_CLEAN		s(10)		// Need cleaning
 #define ATTR_REMOVE		s(11)		// Need removing
 #define ATTR_ATTR		s(12)		// Need setting attribute
+#define ATTR_EXCLUDE		s(13)		// Do not remove
+
 #define ATTR_ONBOOT		s(30)		// On --boot only
 #define ATTR_GLOB		s(31)		// Need expanding
 
@@ -83,8 +86,7 @@ FILE *gLogStream;
 	if (!(assertion)) {						\
 		log_error(__VA_ARGS__);					\
 		exit(-1);						\
-	}								\
-	while(0)
+	} } while(0)
 #define checkl(cond,log,...) ((void)(cond ? 0 : log_warn(log,__VA_ARGS__)))
 
 static const char *skip_space(const char *p)
@@ -237,8 +239,20 @@ static time_t convert_age(const char *s)
 	return t;
 }
 
+inline static int is_excluded(const char *path)
+{
+	for (int i = 0;i < gArg.excludedCount - 1;i++) {
+		if (!fnmatch(gArg.excludedList[i],path,0))
+			return 1;
+	}
+	return 0;
+}
+
 static void clean_file(const char *path,void *ctx)
 {
+	if (is_excluded(path))
+		return;
+
 	time_t ddl = *(time_t*)ctx;
 	if (get_last_time(path) < ddl || gArg.clean) {
 		if (remove(path))
@@ -251,6 +265,9 @@ def_handler(attr_clean)
 {
 	handler_ignore;
 
+	if (!gArg.clean)
+		return;
+
 	time_t ddl = time(NULL) - convert_age(age);
 	iterate_directory(path,clean_file,&ddl,true);
 
@@ -262,7 +279,7 @@ def_handler(attr_createdir)
 	handler_ignore;
 
 	if (!is_valid_file(path)) {
-		if (mkdir(path,0777))
+		if (mkdir(path,0755))
 			log_warn("Cannot create directory %s\n",path);
 	}
 	return;
@@ -271,6 +288,8 @@ def_handler(attr_createdir)
 def_handler(attr_create)
 {
 	handler_ignore;
+	if (!gArg.create)
+		return;
 
 	if (!is_valid_file(path)) {
 		int fd = open(path,O_CREAT | O_WRONLY);
@@ -448,6 +467,22 @@ def_handler(attr_attr)
 	return;
 }
 
+def_handler(attr_exclude)
+{
+	handler_ignore;
+
+	char *t = strdup(path);
+	check(t,"Cannot allocate memory for excluded path %s\n",path);
+
+	gArg.excludedCount++;
+	gArg.excludedList = (char**)realloc(gArg.excludedList,
+					    sizeof(char*) * gArg.excludedCount);
+	check(gArg.excludedList,"Cannot allocate memory for excluded path %s\n",
+	      path);
+	gArg.excludedList[gArg.excludedCount - 2] = t;
+
+	return;
+}
 
 typedef struct {
 	Entry_Attribute attr;
@@ -474,6 +509,7 @@ static void process_file(const char *path,void *ctx)
 			[10]	= attr_clean,
 			[11]	= attr_remove,
 			[12]	= attr_attr,
+			[13]	= attr_exclude,
 		};
 
 	Process_File_In *in = ctx;
@@ -511,6 +547,7 @@ static void parse_conf(FILE *conf)
 			['Q']	= ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM |
 				  ATTR_CLEAN | ATTR_REMOVE,
 			['h']	= ATTR_ATTR | ATTR_GLOB,
+			['x']	= ATTR_EXCLUDE,
 		};
 	static Entry_Attribute attrTableClear[] = {
 			['+']	= ATTR_WRITE,
@@ -633,11 +670,18 @@ int main(int argc,const char *argv[])
 	if (!gArg.noDefault) {
 		(void)1;
 	}
+
+	gArg.excludedList = malloc(sizeof(char*));
+	gArg.excludedCount = 1;
+	gArg.excludedList[0] = NULL;
+	check(gArg.excludedList,"Cannot allocate memory for excluded path");
+
 	/*	Now no options are recognised	*/
 	for (;confIdx < argc;confIdx++)
 		read_conf(argv[confIdx],NULL);
 
 	fclose(gLogStream);
+	free(gArg.excludedList);
 
 	return 0;
 }
