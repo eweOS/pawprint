@@ -19,8 +19,12 @@ pacman -S pawprint
 To compile from source,simply run
 
 ```shell
-cc pawprint.c -o pawprint
+cc pawprint.c -o pawprint -DARCH=x86_64  # For x86-64 platform
 ```
+
+You need to define macro ARCH as your platform,its value could be:
+- ``x86_64``: x86-64
+- ``aarch64``: arm64
 
 ## Special Options (Different from systemd-tmpfiles)
 
