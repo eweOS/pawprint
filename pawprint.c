@@ -14,6 +14,7 @@
 #include<errno.h>
 #include<time.h>
 #include<stdbool.h>
+#include<stdarg.h>
 
 #include<unistd.h>
 #include<sys/types.h>
