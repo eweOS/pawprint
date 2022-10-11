@@ -1,7 +1,7 @@
 /*
  *	pawprint
  *	File:/pawprint.c
- *	Date:2022.10.11
+ *	Date:2022.10.12
  *	By MIT License.
  *	Copyright (c) 2022 Ziyao.
  *	This project is a part of eweOS
@@ -28,13 +28,22 @@
 #include<sys/ioctl.h>
 #include<linux/fs.h>
 
-#if defined(CONF_TARGET_X86_64)
-	#define TARGET_PLATFORM "x86-64"
-#elif defined(CONF_TARGET_I386)
-	#define TARGET_PLATFORM "x86"
-#else
-	#error "No Target is Specified.Try to define CONF_TARGET_*"
+#define x86_64	0
+#define aarch64	1
+#ifndef ARCH
+	#error "No target is specified.Try to define ARCH"
 #endif
+#if ARCH == x86_64
+	#define ARCH_FORMSTR "x86-64"
+#elif ARCH == "aarch64"
+	#define ARCH_FORMSTR "arm64"
+#else
+	#ifndef ARCH_FORMSTR
+		#error "Unsupported target ARCH,with no ARCH_FORMSTR defined."
+	#endif
+#endif
+#undef x86_64
+#undef aarch64
 
 static struct {
 	int boot:1;
@@ -278,6 +287,9 @@ def_handler(attr_createdir)
 {
 	handler_ignore;
 
+	if (!gArg.create)
+		return;
+
 	if (!is_valid_file(path)) {
 		if (mkdir(path,0755))
 			log_warn("Cannot create directory %s\n",path);
@@ -358,6 +370,9 @@ def_handler(attr_ownership)
 def_handler(attr_write)
 {
 	handler_ignore;
+
+	if (!gArg.create)
+		return;
 
 	if (is_valid_file(path)) {
 		int fd = open(path,O_WRONLY | O_TRUNC);
@@ -631,7 +646,19 @@ static void read_conf(const char *path,void *ctx)
 static void usage(const char *name)
 {
 	fprintf(stderr,"%s:\n\t%s ",name,name);
-	fputs("\n",stderr);
+	fputs("[OPTIONS] [Configuration]\n",stderr);
+	fputs("--clean\t\tClean files\n",stderr);
+	fputs("--create\tCreate files\n",stderr);
+	fputs("--remove\tRemove files\n",stderr);
+	fputs("--boot\t\tEnable entries marked on-boot-only ('!' modifier)\n",
+	      stderr);
+	fputs("--no-default\tDo not parse the default configuration\n",stderr);
+	fputs("--log\t\tSpecify the log file\n",stderr);
+	fputs("--help\t\tPrint this help\n",stderr);
+	fputs("Refer to systemd-tmpfiles manual for details\n",stderr);
+	fputs("pawprint is a part of eweOS project,"
+	      "distributed under MIT License.\n",stderr);
+	fputs("See also https://os.ewe.moe for more information\n",stderr);
 	return;
 }
 
