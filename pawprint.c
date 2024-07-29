@@ -666,30 +666,33 @@ int main(int argc,const char *argv[])
 {
 	gLogStream = stderr;
 	int confIdx = 1;
-	for (int i = 1;i < argc;i++) {
-		if (!strcmp(argv[i],"--clean")) {
+
+	for (; confIdx < argc; confIdx++) {
+		if (!strcmp(argv[confIdx], "--clean")) {
 			gArg.clean = 1;
-		} else if (!strcmp(argv[i],"--create")) {
+		} else if (!strcmp(argv[confIdx], "--create")) {
 			gArg.create = 1;
-		} else if (!strcmp(argv[i],"--remove")) {
+		} else if (!strcmp(argv[confIdx], "--remove")) {
 			gArg.remove = 1;
-		} else if (!strcmp(argv[i],"--boot")) {
+		} else if (!strcmp(argv[confIdx], "--boot")) {
 			gArg.boot = 1;
-		} else if (!strcmp(argv[i],"--no-default")) {
+		} else if (!strcmp(argv[confIdx], "--no-default")) {
 			gArg.noDefault = 1;
-		} else if (!strcmp(argv[i],"--log")) {
-			FILE *t = fopen(argv[i + 1],"a");
+		} else if (!strcmp(argv[confIdx], "--log")) {
+			check(confIdx + 1 < argc,
+			      "missing filename for option -l");
+
+			FILE *t = fopen(argv[confIdx + 1],"a");
 			if (!t)
 				log_warn("Cannot open log file %s\n",
-					 argv[i + 1]);
+					 argv[confIdx + 1]);
 			gLogStream = t;
-			i++;
-		} else if (!strcmp(argv[i],"--help") ||
-			   !strcmp(argv[i],"-h")) {
+			confIdx++;
+		} else if (!strcmp(argv[confIdx],"--help") ||
+			   !strcmp(argv[confIdx],"-h")) {
 			usage(argv[0]);
 			return 0;
 		} else {
-			confIdx = i;
 			break;
 		}
 	}
