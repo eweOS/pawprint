@@ -46,11 +46,11 @@
 #undef aarch64
 
 static struct {
-	int boot:1;
-	int clean:1;
-	int create:1;
-	int remove:1;
-	int noDefault:1;
+	unsigned int boot:1;
+	unsigned int clean:1;
+	unsigned int create:1;
+	unsigned int remove:1;
+	unsigned int noDefault:1;
 	char **excludedList;
 	int excludedCount;
 } gArg;
