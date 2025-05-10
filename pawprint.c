@@ -60,12 +60,12 @@ static struct {
 #define ATTR_ONBOOT s(30)   // On --boot only
 #define ATTR_GLOB s(31)	    // Need expanding
 
-typedef uint32_t Entry_Attribute;
+typedef uint32_t entry_attr_t;
 
-typedef struct {
+struct file_entry {
 	const char *path;
-	Entry_Attribute attr;
-} File_Entry;
+	entry_attr_t attr;
+};
 
 // Log Macros
 // For default,print log to stderr
@@ -481,7 +481,7 @@ def_handler(attr_exclude)
 }
 
 typedef struct {
-	Entry_Attribute attr;
+	entry_attr_t attr;
 	const char *modeStr, *userName, *grpName, *ageStr, *arg;
 } Process_File_In;
 
@@ -520,7 +520,7 @@ static void process_file(const char *path, void *ctx)
  */
 static void parse_conf(FILE *conf)
 {
-	static Entry_Attribute attrTableSet[256] = {
+	static entry_attr_t attrTableSet[256] = {
 	    ['w'] = ATTR_WRITE,
 	    ['f'] = ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP | ATTR_PERM,
 	    ['d'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
@@ -534,9 +534,9 @@ static void parse_conf(FILE *conf)
 	    ['h'] = ATTR_ATTR | ATTR_GLOB,
 	    ['x'] = ATTR_EXCLUDE,
 	};
-	static Entry_Attribute attrTableClear[] = {
-	    ['+'] = ATTR_WRITE,
-	};
+	// static entry_attr_t attrTableClear[256] = {
+	// 	['+'] = ATTR_WRITE,  // FIXME: '+' is not like this
+	// };
 
 	while (!feof(conf)) {
 		char *line = NULL;
@@ -558,12 +558,13 @@ static void parse_conf(FILE *conf)
 		if (p[0] == '#')
 			continue;
 
-		Entry_Attribute attr = 0x00;
-		for (int i = 0; p[i]; p++) {
-			if (!attrTableSet[(int)p[i]])
-				log_warn("Invalid type %c\n", p[i]);
-			attr |= attrTableSet[(int)p[i]];
-			attr &= ~attrTableClear[(int)p[i]];
+		entry_attr_t attr = 0x00;
+		for (; p[0]; p++) {
+			uint8_t idx = p[0];
+			if (!attrTableSet[idx])
+				log_warn("Invalid type %c\n", idx);
+			attr |= attrTableSet[idx];
+			// attr &= ~attrTableClear[idx];
 		}
 
 		if ((attr & ATTR_ONBOOT) && !gArg.boot) // Handler '!'
