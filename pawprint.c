@@ -611,21 +611,21 @@ static void read_conf(const char *path, void *ctx)
 
 static void usage(const char *name)
 {
-	fprintf(stderr, "%s [OPTIONS] [Configuration]\n\n", name);
-	fputs("Options:\n", stderr);
-	fputs("  --clean        Clean files\n", stderr);
-	fputs("  --create       Create files\n", stderr);
-	fputs("  --remove       Remove files\n", stderr);
-	fputs("  --boot         Enable entries marked on-boot-only ('!' "
-	      "modifier)\n",
-	      stderr);
-	fputs("  --no-default   Do not parse the default configuration\n",
-	      stderr);
-	fputs("  --log          Specify the log file\n", stderr);
-	fputs("  --help         Print this help\n", stderr);
-	fputs("\n", stderr);
-	fputs("Refer to systemd-tmpfiles(8) for details.\n", stderr);
-	fputs("pawprint is a part of eweOS project, distributed under MIT "
+	fprintf(stderr, "%s [OPTIONS] [Configuration]\n", name);
+	fputs("\n"
+	      "Options:\n"
+	      "  --clean        Clean files\n"
+	      "  --create       Create files\n"
+	      "  --remove       Remove files\n"
+	      "  --boot         Enable entries marked on-boot-only ('!' "
+	      "modifier)\n"
+	      "  --no-default   Do not parse the default configuration\n"
+	      "  --log          Specify the log file\n"
+	      "  --help         Print this help\n"
+	      "\n"
+	      "Refer to tmpfiles.d(5) for details, though pawprint may not "
+	      "implement all functions.\n"
+	      "pawprint is a part of eweOS project, distributed under the MIT "
 	      "License.\n",
 	      stderr);
 	return;
