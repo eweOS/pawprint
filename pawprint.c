@@ -70,8 +70,8 @@ typedef struct {
 // Log Macros
 // For default,print log to stderr
 FILE *gLogStream;
-#define log_error(...) (fprintf(gLogStream, "[Error]:" __VA_ARGS__))
-#define log_warn(...) (fprintf(gLogStream, "[Warning]:" __VA_ARGS__))
+#define log_error(...) (fprintf(gLogStream, "error: " __VA_ARGS__))
+#define log_warn(...) (fprintf(gLogStream, "warning: " __VA_ARGS__))
 #define check(assertion, ...)                                                  \
 	do {                                                                   \
 		if (!(assertion)) {                                            \
@@ -327,7 +327,7 @@ static void adjust_user(const char *path, const char *user)
 	}
 
 	if (chown(path, pswd->pw_uid, -1))
-		log_warn("Cannot transfer file %s to user %s", path, user);
+		log_warn("Cannot transfer file %s to user %s\n", path, user);
 	return;
 }
 
@@ -611,21 +611,23 @@ static void read_conf(const char *path, void *ctx)
 
 static void usage(const char *name)
 {
-	fprintf(stderr, "%s:\n\t%s ", name, name);
-	fputs("[OPTIONS] [Configuration]\n", stderr);
-	fputs("--clean\t\tClean files\n", stderr);
-	fputs("--create\tCreate files\n", stderr);
-	fputs("--remove\tRemove files\n", stderr);
-	fputs("--boot\t\tEnable entries marked on-boot-only ('!' modifier)\n",
+	fprintf(stderr, "%s [OPTIONS] [Configuration]\n\n", name);
+	fputs("Options:\n", stderr);
+	fputs("  --clean        Clean files\n", stderr);
+	fputs("  --create       Create files\n", stderr);
+	fputs("  --remove       Remove files\n", stderr);
+	fputs("  --boot         Enable entries marked on-boot-only ('!' "
+	      "modifier)\n",
 	      stderr);
-	fputs("--no-default\tDo not parse the default configuration\n", stderr);
-	fputs("--log\t\tSpecify the log file\n", stderr);
-	fputs("--help\t\tPrint this help\n", stderr);
-	fputs("Refer to systemd-tmpfiles manual for details\n", stderr);
-	fputs("pawprint is a part of eweOS project,"
-	      "distributed under MIT License.\n",
+	fputs("  --no-default   Do not parse the default configuration\n",
 	      stderr);
-	fputs("See also https://os.ewe.moe for more information\n", stderr);
+	fputs("  --log          Specify the log file\n", stderr);
+	fputs("  --help         Print this help\n", stderr);
+	fputs("\n", stderr);
+	fputs("Refer to systemd-tmpfiles(8) for details.\n", stderr);
+	fputs("pawprint is a part of eweOS project, distributed under MIT "
+	      "License.\n",
+	      stderr);
 	return;
 }
 
