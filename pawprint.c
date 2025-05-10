@@ -539,28 +539,24 @@ static void parse_conf(FILE *conf)
 	};
 
 	while (!feof(conf)) {
-		char *typeStr, *pathStr, *modeStr, *userName, *grpName;
-		char *ageStr;
-		int termNum =
-		    fscanf(conf, "%ms%ms%ms%ms%ms%ms", &typeStr, &pathStr,
-			   &modeStr, &userName, &grpName, &ageStr);
+		char *line = NULL;
+		char *type = NULL, *path = NULL, *mode = NULL, *user = NULL,
+		     *group = NULL, *age = NULL;
 
-		if (termNum < 0)
+		size_t buf_len = 0;
+		ssize_t line_len = getline(&line, &buf_len, conf);
+		if (line_len < 0 || !line)
 			break;
 
-		const char *p = skip_space(typeStr);
-		if (p[0] == '#') { // Comment
-			next_line(conf);
-			continue;
-		}
+		int term_len = 0;
+		int matched = sscanf(line, "%ms%ms%ms%ms%ms%ms%n", &type, &path,
+				     &mode, &user, &group, &age, &term_len);
+		if (matched < 0)
+			break;
 
-		char arg[256]; // FIXME: Fixed max length
-		fgets(arg, 256, conf);
-		size_t argLength = strlen(arg);
-		if (arg[argLength - 1] == '\n') {
-			arg[argLength - 1] = '\0';
-			argLength--;
-		}
+		const char *p = skip_space(type);
+		if (p[0] == '#')
+			continue;
 
 		Entry_Attribute attr = 0x00;
 		for (int i = 0; p[i]; p++) {
@@ -576,20 +572,19 @@ static void parse_conf(FILE *conf)
 		char dummy[1] = "";
 		Process_File_In in = {
 		    .attr = attr & ~ATTR_ONBOOT & ~ATTR_GLOB,
-		    .modeStr = modeStr ? modeStr : dummy,
-		    .userName = userName ? userName : dummy,
-		    .grpName = grpName ? grpName : dummy,
-		    .ageStr = ageStr ? ageStr : dummy,
-		    .arg = skip_space(arg),
+		    .modeStr = mode ? mode : dummy,
+		    .userName = user ? user : dummy,
+		    .grpName = group ? group : dummy,
+		    .ageStr = age ? age : dummy,
+		    .arg = line + term_len,
 		};
 		if (attr & ATTR_GLOB) {
-			glob_match(pathStr, process_file, (void *)&in);
+			glob_match(path, process_file, (void *)&in);
 		} else {
-			process_file(pathStr, (void *)&in);
+			process_file(path, (void *)&in);
 		}
 
-		free_if(6, typeStr, pathStr, modeStr, userName, grpName,
-			ageStr);
+		free_if(7, line, type, path, mode, user, group, age);
 	}
 
 	return;
