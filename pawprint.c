@@ -570,6 +570,9 @@ static void parse_conf(FILE *conf)
 		if ((attr & ATTR_ONBOOT) && !gArg.boot) // Handler '!'
 			continue;
 
+		char *arg = skip_space(line + term_len);
+		arg[strlen(arg) - 1] = '\0';
+
 		char dummy[1] = "";
 		Process_File_In in = {
 		    .attr = attr & ~ATTR_ONBOOT & ~ATTR_GLOB,
@@ -577,7 +580,7 @@ static void parse_conf(FILE *conf)
 		    .userName = user ? user : dummy,
 		    .grpName = group ? group : dummy,
 		    .ageStr = age ? age : dummy,
-		    .arg = line + term_len,
+		    .arg = arg,
 		};
 		if (attr & ATTR_GLOB) {
 			glob_match(path, process_file, (void *)&in);
