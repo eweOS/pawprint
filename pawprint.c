@@ -138,7 +138,7 @@ static int is_directory(const char *path)
 	struct stat t;
 
 	if (stat(path, &t)) {
-		log_warn("Cannot get the status of file %s", path);
+		log_warn("Cannot get the status of file %s\n", path);
 		return 0;
 	}
 
@@ -652,7 +652,7 @@ int main(int argc, const char *argv[])
 			g_arg.no_default = 1;
 		} else if (!strcmp(argv[conf_idx], "--log")) {
 			check(conf_idx + 1 < argc,
-			      "missing filename for option -l");
+			      "missing filename for option -l\n");
 
 			FILE *t = fopen(argv[conf_idx + 1], "a");
 			if (!t)
@@ -672,7 +672,7 @@ int main(int argc, const char *argv[])
 	g_arg.excluded = malloc(sizeof(char *));
 	g_arg.excluded_count = 1;
 	g_arg.excluded[0] = NULL;
-	check(g_arg.excluded, "Cannot allocate memory for excluded path");
+	check(g_arg.excluded, "Cannot allocate memory for excluded path\n");
 
 	if (!g_arg.no_default) {
 		iterate_directory("/etc/tmpfiles.d", read_conf, NULL, true);
