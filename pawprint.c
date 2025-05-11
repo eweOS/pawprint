@@ -28,23 +28,6 @@
 #include<sys/ioctl.h>
 #include<linux/fs.h>
 
-#define x86_64	0
-#define aarch64	1
-#ifndef ARCH
-	#error "No target is specified.Try to define ARCH"
-#endif
-#if ARCH == x86_64
-	#define ARCH_FORMSTR "x86-64"
-#elif ARCH == "aarch64"
-	#define ARCH_FORMSTR "arm64"
-#else
-	#ifndef ARCH_FORMSTR
-		#error "Unsupported target ARCH,with no ARCH_FORMSTR defined."
-	#endif
-#endif
-#undef x86_64
-#undef aarch64
-
 static struct {
 	unsigned int boot:1;
 	unsigned int clean:1;
