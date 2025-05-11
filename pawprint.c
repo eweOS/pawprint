@@ -68,7 +68,6 @@ struct file_entry {
 };
 
 // Log Macros
-// For default,print log to stderr
 FILE *g_log_file;
 #define log_error(...) (fprintf(g_log_file, "error: " __VA_ARGS__))
 #define log_warn(...) (fprintf(g_log_file, "warning: " __VA_ARGS__))
@@ -636,6 +635,7 @@ static void usage(const char *name)
 
 int main(int argc, const char *argv[])
 {
+	// By default, print log to stderr
 	g_log_file = stderr;
 
 	int conf_idx = 1;
