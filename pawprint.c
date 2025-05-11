@@ -31,10 +31,10 @@ static struct {
 	unsigned int clean : 1;
 	unsigned int create : 1;
 	unsigned int remove : 1;
-	unsigned int noDefault : 1;
-	char **excludedList;
-	int excludedCount;
-} gArg;
+	unsigned int no_default : 1;
+	char **excluded;
+	int excluded_count;
+} g_arg;
 
 /*
  * NOTE:
@@ -69,9 +69,9 @@ struct file_entry {
 
 // Log Macros
 // For default,print log to stderr
-FILE *gLogStream;
-#define log_error(...) (fprintf(gLogStream, "error: " __VA_ARGS__))
-#define log_warn(...) (fprintf(gLogStream, "warning: " __VA_ARGS__))
+FILE *g_log_file;
+#define log_error(...) (fprintf(g_log_file, "error: " __VA_ARGS__))
+#define log_warn(...) (fprintf(g_log_file, "warning: " __VA_ARGS__))
 #define check(assertion, ...)                                                  \
 	do {                                                                   \
 		if (!(assertion)) {                                            \
@@ -127,10 +127,10 @@ static time_t get_last_time(const char *path)
 
 	stat(path, &t);
 
-	time_t lastChange = t.st_atim.tv_sec > t.st_mtim.tv_sec
-				? t.st_atim.tv_sec
-				: t.st_mtim.tv_sec;
-	return lastChange > t.st_ctim.tv_sec ? lastChange : t.st_ctim.tv_sec;
+	time_t last_change = t.st_atim.tv_sec > t.st_mtim.tv_sec
+				 ? t.st_atim.tv_sec
+				 : t.st_mtim.tv_sec;
+	return last_change > t.st_ctim.tv_sec ? last_change : t.st_ctim.tv_sec;
 }
 
 static int is_directory(const char *path)
@@ -202,14 +202,13 @@ static void glob_match(const char *pattern,
 }
 
 #define def_handler(name)                                                      \
-	static void name(const char *path, const char *mode,                   \
-			 const char *userName, const char *grpName,            \
-			 const char *age, const char *arg)
+	static void name(const char *path, const char *mode, const char *user, \
+			 const char *group, const char *age, const char *arg)
 #define handler_ignore                                                         \
 	(void)path;                                                            \
 	(void)mode;                                                            \
-	(void)userName;                                                        \
-	(void)grpName;                                                         \
+	(void)user;                                                            \
+	(void)group;                                                           \
 	(void)age;                                                             \
 	(void)arg;
 
@@ -238,8 +237,8 @@ static time_t convert_age(const char *s)
 
 inline static int is_excluded(const char *path)
 {
-	for (int i = 0; i < gArg.excludedCount - 1; i++) {
-		if (!fnmatch(gArg.excludedList[i], path, 0))
+	for (int i = 0; i < g_arg.excluded_count - 1; i++) {
+		if (!fnmatch(g_arg.excluded[i], path, 0))
 			return 1;
 	}
 	return 0;
@@ -251,7 +250,7 @@ static void clean_file(const char *path, void *ctx)
 		return;
 
 	time_t ddl = *(time_t *)ctx;
-	if (get_last_time(path) < ddl || gArg.clean) {
+	if (get_last_time(path) < ddl || g_arg.clean) {
 		if (remove(path))
 			log_warn("Cannot remove file %s\n", path);
 	}
@@ -262,7 +261,7 @@ def_handler(attr_clean)
 {
 	handler_ignore;
 
-	if (!gArg.clean)
+	if (!g_arg.clean)
 		return;
 
 	time_t ddl = time(NULL) - convert_age(age);
@@ -275,7 +274,7 @@ def_handler(attr_createdir)
 {
 	handler_ignore;
 
-	if (!gArg.create)
+	if (!g_arg.create)
 		return;
 
 	if (!is_valid_file(path)) {
@@ -288,7 +287,7 @@ def_handler(attr_createdir)
 def_handler(attr_create)
 {
 	handler_ignore;
-	if (!gArg.create)
+	if (!g_arg.create)
 		return;
 
 	if (!is_valid_file(path)) {
@@ -336,13 +335,13 @@ static void adjust_group(const char *path, const char *group)
 	if (group[0] == '-' || !group[0])
 		return;
 
-	struct group *grpInfo = getgrnam(group);
-	if (!grpInfo) {
+	struct group *info = getgrnam(group);
+	if (!info) {
 		log_warn("Invalid group %s\n", group);
 		return;
 	}
 
-	if (chown(path, -1, grpInfo->gr_gid))
+	if (chown(path, -1, info->gr_gid))
 		log_warn("Cannot transfer file %s to group %s\n", path, group);
 	return;
 }
@@ -350,8 +349,8 @@ static void adjust_group(const char *path, const char *group)
 def_handler(attr_ownership)
 {
 	handler_ignore;
-	adjust_user(path, userName);
-	adjust_group(path, grpName);
+	adjust_user(path, user);
+	adjust_group(path, group);
 	return;
 }
 
@@ -359,7 +358,7 @@ def_handler(attr_write)
 {
 	handler_ignore;
 
-	if (!gArg.create)
+	if (!g_arg.create)
 		return;
 
 	if (is_valid_file(path)) {
@@ -394,7 +393,7 @@ def_handler(attr_remove)
 {
 	handler_ignore;
 
-	if (!gArg.remove)
+	if (!g_arg.remove)
 		return;
 
 	if (is_directory(path)) {
@@ -470,44 +469,44 @@ def_handler(attr_exclude)
 	char *t = strdup(path);
 	check(t, "Cannot allocate memory for excluded path %s\n", path);
 
-	gArg.excludedCount++;
-	gArg.excludedList = (char **)realloc(
-	    gArg.excludedList, sizeof(char *) * gArg.excludedCount);
-	check(gArg.excludedList,
-	      "Cannot allocate memory for excluded path %s\n", path);
-	gArg.excludedList[gArg.excludedCount - 2] = t;
+	g_arg.excluded_count++;
+	g_arg.excluded = (char **)realloc(
+	    g_arg.excluded, sizeof(char *) * g_arg.excluded_count);
+	check(g_arg.excluded, "Cannot allocate memory for excluded path %s\n",
+	      path);
+	g_arg.excluded[g_arg.excluded_count - 2] = t;
 
 	return;
 }
 
-typedef struct {
+struct process_file_info {
 	entry_attr_t attr;
-	const char *modeStr, *userName, *grpName, *ageStr, *arg;
-} Process_File_In;
+	const char *mode, *user, *group, *age, *arg;
+};
 
 /*
  * The order in array ctx is important:
- *    attr,modeStr,userName,grpName,age,arg
+ *    attr, mode, user, group, age, arg
  * All are in the same size as a normal pointer
  */
 static void process_file(const char *path, void *ctx)
 {
-	typedef void (*Attr_Handler)(const char *path, const char *mode,
-				     const char *userName, const char *grpName,
+	typedef void (*attr_handler)(const char *path, const char *mode,
+				     const char *user, const char *group,
 				     const char *age, const char *arg);
-	static Attr_Handler attrHandler[] = {
+	static attr_handler handlers[] = {
 	    [1] = attr_create,	[4] = attr_perm,      [5] = attr_createdir,
 	    [8] = attr_write,	[9] = attr_ownership, [10] = attr_clean,
 	    [11] = attr_remove, [12] = attr_attr,     [13] = attr_exclude,
 	};
 
-	Process_File_In *in = ctx;
+	struct process_file_info *info = ctx;
 
-	for (int i = 0, mask = 1; (size_t)i < (sizeof(in->attr) << 3) - 1;
+	for (int i = 0, mask = 1; (size_t)i < (sizeof(info->attr) << 3) - 1;
 	     i++) {
-		if (in->attr & mask) {
-			attrHandler[i](path, in->modeStr, in->userName,
-				       in->grpName, in->ageStr, in->arg);
+		if (info->attr & mask) {
+			handlers[i](path, info->mode, info->user, info->group,
+				    info->age, info->arg);
 		}
 		mask <<= 1;
 	}
@@ -520,7 +519,7 @@ static void process_file(const char *path, void *ctx)
  */
 static void parse_conf(FILE *conf)
 {
-	static entry_attr_t attrTableSet[256] = {
+	static entry_attr_t attr_table_type[256] = {
 	    ['w'] = ATTR_WRITE,
 	    ['f'] = ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP | ATTR_PERM,
 	    ['d'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
@@ -534,7 +533,7 @@ static void parse_conf(FILE *conf)
 	    ['h'] = ATTR_ATTR | ATTR_GLOB,
 	    ['x'] = ATTR_EXCLUDE,
 	};
-	// static entry_attr_t attrTableClear[256] = {
+	// static entry_attr_t attr_table_clear[256] = {
 	// 	['+'] = ATTR_WRITE,  // FIXME: '+' is not like this
 	// };
 
@@ -561,31 +560,31 @@ static void parse_conf(FILE *conf)
 		entry_attr_t attr = 0x00;
 		for (; p[0]; p++) {
 			uint8_t idx = p[0];
-			if (!attrTableSet[idx])
+			if (!attr_table_type[idx])
 				log_warn("Invalid type %c\n", idx);
-			attr |= attrTableSet[idx];
-			// attr &= ~attrTableClear[idx];
+			attr |= attr_table_type[idx];
+			// attr &= ~attr_table_clear[idx];
 		}
 
-		if ((attr & ATTR_ONBOOT) && !gArg.boot) // Handler '!'
+		if ((attr & ATTR_ONBOOT) && !g_arg.boot) // Handler '!'
 			goto continue_cleanup;
 
-		char *arg = skip_space(line + term_len);
+		char *arg = (char *)skip_space(line + term_len);
 		arg[strlen(arg) - 1] = '\0';
 
 		char dummy[1] = "";
-		Process_File_In in = {
+		struct process_file_info info = {
 		    .attr = attr & ~ATTR_ONBOOT & ~ATTR_GLOB,
-		    .modeStr = mode ? mode : dummy,
-		    .userName = user ? user : dummy,
-		    .grpName = group ? group : dummy,
-		    .ageStr = age ? age : dummy,
+		    .mode = mode ? mode : dummy,
+		    .user = user ? user : dummy,
+		    .group = group ? group : dummy,
+		    .age = age ? age : dummy,
 		    .arg = arg,
 		};
 		if (attr & ATTR_GLOB) {
-			glob_match(path, process_file, (void *)&in);
+			glob_match(path, process_file, (void *)&info);
 		} else {
-			process_file(path, (void *)&in);
+			process_file(path, (void *)&info);
 		}
 
 	continue_cleanup:
@@ -637,32 +636,32 @@ static void usage(const char *name)
 
 int main(int argc, const char *argv[])
 {
-	gLogStream = stderr;
-	int confIdx = 1;
+	g_log_file = stderr;
 
-	for (; confIdx < argc; confIdx++) {
-		if (!strcmp(argv[confIdx], "--clean")) {
-			gArg.clean = 1;
-		} else if (!strcmp(argv[confIdx], "--create")) {
-			gArg.create = 1;
-		} else if (!strcmp(argv[confIdx], "--remove")) {
-			gArg.remove = 1;
-		} else if (!strcmp(argv[confIdx], "--boot")) {
-			gArg.boot = 1;
-		} else if (!strcmp(argv[confIdx], "--no-default")) {
-			gArg.noDefault = 1;
-		} else if (!strcmp(argv[confIdx], "--log")) {
-			check(confIdx + 1 < argc,
+	int conf_idx = 1;
+	for (; conf_idx < argc; conf_idx++) {
+		if (!strcmp(argv[conf_idx], "--clean")) {
+			g_arg.clean = 1;
+		} else if (!strcmp(argv[conf_idx], "--create")) {
+			g_arg.create = 1;
+		} else if (!strcmp(argv[conf_idx], "--remove")) {
+			g_arg.remove = 1;
+		} else if (!strcmp(argv[conf_idx], "--boot")) {
+			g_arg.boot = 1;
+		} else if (!strcmp(argv[conf_idx], "--no-default")) {
+			g_arg.no_default = 1;
+		} else if (!strcmp(argv[conf_idx], "--log")) {
+			check(conf_idx + 1 < argc,
 			      "missing filename for option -l");
 
-			FILE *t = fopen(argv[confIdx + 1], "a");
+			FILE *t = fopen(argv[conf_idx + 1], "a");
 			if (!t)
 				log_warn("Cannot open log file %s\n",
-					 argv[confIdx + 1]);
-			gLogStream = t;
-			confIdx++;
-		} else if (!strcmp(argv[confIdx], "--help") ||
-			   !strcmp(argv[confIdx], "-h")) {
+					 argv[conf_idx + 1]);
+			g_log_file = t;
+			conf_idx++;
+		} else if (!strcmp(argv[conf_idx], "--help") ||
+			   !strcmp(argv[conf_idx], "-h")) {
 			usage(argv[0]);
 			return 0;
 		} else {
@@ -670,22 +669,22 @@ int main(int argc, const char *argv[])
 		}
 	}
 
-	gArg.excludedList = malloc(sizeof(char *));
-	gArg.excludedCount = 1;
-	gArg.excludedList[0] = NULL;
-	check(gArg.excludedList, "Cannot allocate memory for excluded path");
+	g_arg.excluded = malloc(sizeof(char *));
+	g_arg.excluded_count = 1;
+	g_arg.excluded[0] = NULL;
+	check(g_arg.excluded, "Cannot allocate memory for excluded path");
 
-	if (!gArg.noDefault) {
+	if (!g_arg.no_default) {
 		iterate_directory("/etc/tmpfiles.d", read_conf, NULL, true);
 		iterate_directory("/lib/tmpfiles.d", read_conf, NULL, true);
 	}
 
 	/* Now no options are recognised */
-	for (; confIdx < argc; confIdx++)
-		read_conf(argv[confIdx], NULL);
+	for (; conf_idx < argc; conf_idx++)
+		read_conf(argv[conf_idx], NULL);
 
-	fclose(gLogStream);
-	free(gArg.excludedList);
+	fclose(g_log_file);
+	free(g_arg.excluded);
 
 	return 0;
 }
