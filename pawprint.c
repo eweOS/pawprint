@@ -546,17 +546,17 @@ static void parse_conf(FILE *conf)
 		size_t buf_len = 0;
 		ssize_t line_len = getline(&line, &buf_len, conf);
 		if (line_len < 0 || !line)
-			break;
+			goto break_cleanup;
 
 		int term_len = 0;
 		int matched = sscanf(line, "%ms%ms%ms%ms%ms%ms%n", &type, &path,
 				     &mode, &user, &group, &age, &term_len);
 		if (matched < 0)
-			break;
+			goto break_cleanup;
 
 		const char *p = skip_space(type);
 		if (p[0] == '#')
-			continue;
+			goto continue_cleanup;
 
 		entry_attr_t attr = 0x00;
 		for (; p[0]; p++) {
@@ -568,7 +568,7 @@ static void parse_conf(FILE *conf)
 		}
 
 		if ((attr & ATTR_ONBOOT) && !gArg.boot) // Handler '!'
-			continue;
+			goto continue_cleanup;
 
 		char *arg = skip_space(line + term_len);
 		arg[strlen(arg) - 1] = '\0';
@@ -588,7 +588,12 @@ static void parse_conf(FILE *conf)
 			process_file(path, (void *)&in);
 		}
 
+	continue_cleanup:
 		free_if(7, line, type, path, mode, user, group, age);
+		continue;
+	break_cleanup:
+		free_if(7, line, type, path, mode, user, group, age);
+		break;
 	}
 
 	return;
