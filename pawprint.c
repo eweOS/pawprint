@@ -57,7 +57,6 @@ static struct {
 #define ATTR_ATTR s(12)	    // Need setting attribute
 #define ATTR_EXCLUDE s(13)  // Do not remove
 
-#define ATTR_ONBOOT s(30)   // On --boot only
 #define ATTR_GLOB s(31)	    // Need expanding
 
 typedef uint32_t entry_attr_t;
@@ -522,7 +521,6 @@ static void parse_conf(FILE *conf)
 	    ['w'] = ATTR_WRITE,
 	    ['f'] = ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP | ATTR_PERM,
 	    ['d'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
-	    ['!'] = ATTR_ONBOOT,
 	    ['r'] = ATTR_REMOVE | ATTR_GLOB,
 	    ['D'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN |
 		    ATTR_REMOVE,
@@ -532,9 +530,6 @@ static void parse_conf(FILE *conf)
 	    ['h'] = ATTR_ATTR | ATTR_GLOB,
 	    ['x'] = ATTR_EXCLUDE,
 	};
-	// static entry_attr_t attr_table_clear[256] = {
-	// 	['+'] = ATTR_WRITE,  // FIXME: '+' is not like this
-	// };
 
 	while (!feof(conf)) {
 		char *line = NULL;
@@ -553,27 +548,30 @@ static void parse_conf(FILE *conf)
 			goto break_cleanup;
 
 		const char *p = skip_space(type);
-		if (p[0] == '#')
-			goto continue_cleanup;
-
 		entry_attr_t attr = 0x00;
-		for (; p[0]; p++) {
-			uint8_t idx = p[0];
-			if (!attr_table_type[idx])
-				log_warn("Invalid type %c\n", idx);
-			attr |= attr_table_type[idx];
-			// attr &= ~attr_table_clear[idx];
-		}
 
-		if ((attr & ATTR_ONBOOT) && !g_arg.boot) // Handler '!'
+		if (*p == '#') {
 			goto continue_cleanup;
+		} else if (attr_table_type[*p]) {
+			attr |= attr_table_type[*p];
+		} else {
+			log_warn("Invalid type %c\n", *p);
+			goto continue_cleanup;
+		}
+		p++;
+
+		for (; *p; p++) {
+			if (*p == '!' && !g_arg.boot)
+				goto continue_cleanup;
+			// TODO: '+' handler
+		}
 
 		char *arg = (char *)skip_space(line + term_len);
 		arg[strlen(arg) - 1] = '\0';
 
 		char dummy[1] = "";
 		struct process_file_info info = {
-		    .attr = attr & ~ATTR_ONBOOT & ~ATTR_GLOB,
+		    .attr = attr & ~ATTR_GLOB,
 		    .mode = mode ? mode : dummy,
 		    .user = user ? user : dummy,
 		    .group = group ? group : dummy,
