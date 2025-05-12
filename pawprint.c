@@ -40,22 +40,22 @@ static struct {
  * Handlers are executed from the lowest number/bit to the highest
  */
 enum {
-	A_CREATE = 1, // Create file
-	A_APPEND,     // Append file
+	A_CREATE = 1,	  // Create file
+	A_APPEND,	  // Append file
 
-	A_PERM = 4,   // Adjust permission
-	A_CREATE_DIR, // Create directory
-	A_WRITE,      // Write to file
-	A_OWNER,      // Adjust ownership
-	A_CLEAN,      // Clean directory (based on age)
-	A_REMOVE,     // Remove file, or contents of directory
-	A_ATTR,	      // Set file attributes
-	A_EXCLUDE,    // Do not remove
+	A_CREATE_DIR = 4, // Create directory
+	A_WRITE,	  // Write to file
+	A_OWNER,	  // Adjust ownership
+	A_PERM,		  // Adjust permission
+	A_CLEAN,	  // Clean directory (based on age)
+	A_REMOVE,	  // Remove file, or contents of directory
+	A_ATTR,		  // Set file attributes
+	A_EXCLUDE,	  // Do not remove
 
-	A_EXIST = 28, // Check if file or directory exists
-	A_NOSYM,      // Do not follow symlink
-	A_RECUR,      // Recursively apply rules
-	A_GLOB,	      // Expand glob
+	A_EXIST = 28,	  // Check if file or directory exists
+	A_NOSYM,	  // Do not follow symlink
+	A_RECUR,	  // Recursively apply rules
+	A_GLOB,		  // Expand glob
 };
 
 #define s(k) (1 << (k))
