@@ -37,27 +37,28 @@ static struct {
 } g_arg;
 
 /*
- * NOTE:
- * Remember to check parse_conf if these macros are changed
- * Handlers are executed from the lowest bit to the highest
+ * Handlers are executed from the lowest number/bit to the highest
  */
+enum {
+	A_CREATE = 1, // Create file
+	A_APPEND,     // Append file
+
+	A_PERM = 4,   // Adjust permission
+	A_CREATE_DIR, // Create directory
+	A_WRITE,      // Write to file
+	A_OWNER,      // Adjust ownership
+	A_CLEAN,      // Clean directory (based on age)
+	A_REMOVE,     // Remove file, or contents of directory
+	A_ATTR,	      // Set file attributes
+	A_EXCLUDE,    // Do not remove
+
+	A_EXIST = 28, // Check if file or directory exists
+	A_NOSYM,      // Do not follow symlink
+	A_RECUR,      // Recursively apply rules
+	A_GLOB,	      // Expand glob
+};
+
 #define s(k) (1 << (k))
-#define ATTR_FILE s(0)	    // File or directory
-#define ATTR_CREATE s(1)    // Create or fail
-#define ATTR_APPEND s(2)    // Append or not
-
-#define ATTR_PERM s(4)	    // Adjust permission
-#define ATTR_CREATEDIR s(5) // Create directory
-#define ATTR_NOSYM s(6)	    // Do not follow symlink
-#define ATTR_RECUR s(7)	    // Recusively
-#define ATTR_WRITE s(8)	    // Write message
-#define ATTR_OWNERSHIP s(9) // Adjust ownership, both group and user
-#define ATTR_CLEAN s(10)    // Need cleaning
-#define ATTR_REMOVE s(11)   // Need removing
-#define ATTR_ATTR s(12)	    // Need setting attribute
-#define ATTR_EXCLUDE s(13)  // Do not remove
-
-#define ATTR_GLOB s(31)	    // Need expanding
 
 typedef uint32_t entry_attr_t;
 
@@ -268,7 +269,7 @@ def_handler(attr_clean)
 	return;
 }
 
-def_handler(attr_createdir)
+def_handler(attr_create_dir)
 {
 	handler_ignore;
 
@@ -344,7 +345,7 @@ static void adjust_group(const char *path, const char *group)
 	return;
 }
 
-def_handler(attr_ownership)
+def_handler(attr_owner)
 {
 	handler_ignore;
 	adjust_user(path, user);
@@ -493,9 +494,17 @@ static void process_file(const char *path, void *ctx)
 				     const char *user, const char *group,
 				     const char *age, const char *arg);
 	static attr_handler handlers[] = {
-	    [1] = attr_create,	[4] = attr_perm,      [5] = attr_createdir,
-	    [8] = attr_write,	[9] = attr_ownership, [10] = attr_clean,
-	    [11] = attr_remove, [12] = attr_attr,     [13] = attr_exclude,
+	    [A_CREATE] = attr_create,
+	    // [A_APPEND] = attr_append,
+
+	    [A_PERM] = attr_perm,
+	    [A_CREATE_DIR] = attr_create_dir,
+	    [A_WRITE] = attr_write,
+	    [A_OWNER] = attr_owner,
+	    [A_CLEAN] = attr_clean,
+	    [A_REMOVE] = attr_remove,
+	    [A_ATTR] = attr_attr,
+	    [A_EXCLUDE] = attr_exclude,
 	};
 
 	struct process_file_info *info = ctx;
@@ -518,17 +527,17 @@ static void process_file(const char *path, void *ctx)
 static void parse_conf(FILE *conf)
 {
 	static entry_attr_t attr_table_type[256] = {
-	    ['f'] = ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP | ATTR_PERM,
-	    ['w'] = ATTR_WRITE,
-	    ['d'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
-	    ['D'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN |
-		    ATTR_REMOVE,
-	    ['r'] = ATTR_REMOVE | ATTR_GLOB,
-	    ['q'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
-	    ['Q'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN |
-		    ATTR_REMOVE,
-	    ['x'] = ATTR_EXCLUDE,
-	    ['h'] = ATTR_ATTR | ATTR_GLOB,
+	    ['f'] = s(A_CREATE) | s(A_WRITE) | s(A_OWNER) | s(A_PERM),
+	    ['w'] = s(A_WRITE),
+	    ['d'] = s(A_CREATE_DIR) | s(A_OWNER) | s(A_PERM) | s(A_CLEAN),
+	    ['D'] = s(A_CREATE_DIR) | s(A_OWNER) | s(A_PERM) | s(A_CLEAN) |
+		    s(A_REMOVE),
+	    ['r'] = s(A_REMOVE) | s(A_GLOB),
+	    ['q'] = s(A_CREATE_DIR) | s(A_OWNER) | s(A_PERM) | s(A_CLEAN),
+	    ['Q'] = s(A_CREATE_DIR) | s(A_OWNER) | s(A_PERM) | s(A_CLEAN) |
+		    s(A_REMOVE),
+	    ['x'] = s(A_EXCLUDE),
+	    ['h'] = s(A_ATTR) | s(A_GLOB),
 	};
 
 	while (!feof(conf)) {
@@ -571,14 +580,14 @@ static void parse_conf(FILE *conf)
 
 		char dummy[1] = "";
 		struct process_file_info info = {
-		    .attr = attr & ~ATTR_GLOB,
+		    .attr = attr & ~s(A_GLOB),
 		    .mode = mode ? mode : dummy,
 		    .user = user ? user : dummy,
 		    .group = group ? group : dummy,
 		    .age = age ? age : dummy,
 		    .arg = arg,
 		};
-		if (attr & ATTR_GLOB) {
+		if (attr & s(A_GLOB)) {
 			glob_match(path, process_file, (void *)&info);
 		} else {
 			process_file(path, (void *)&info);
