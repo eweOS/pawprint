@@ -201,8 +201,8 @@ static void glob_match(const char *pattern,
 }
 
 typedef void (*attr_handler_t)(const char *path, const char *mode,
-			     const char *user, const char *group,
-			     const char *age, const char *arg);
+			       const char *user, const char *group,
+			       const char *age, const char *arg);
 #define def_handler(name)                                                      \
 	static void name(const char *path, const char *mode, const char *user, \
 			 const char *group, const char *age, const char *arg)
@@ -510,12 +510,11 @@ static void process_file(const char *path, void *ctx)
 	struct process_file_info *info = ctx;
 
 	for (int i = 0, mask = 1; (size_t)i < (sizeof(info->attr) << 3) - 1;
-	     i++) {
-		if (info->attr & mask) {
+	     i++, mask <<= 1) {
+		if ((info->attr & mask) && handlers[i]) {
 			handlers[i](path, info->mode, info->user, info->group,
 				    info->age, info->arg);
 		}
-		mask <<= 1;
 	}
 
 	return;
@@ -581,7 +580,7 @@ static void parse_conf(FILE *conf)
 
 		char dummy[1] = "";
 		struct process_file_info info = {
-		    .attr = attr & ~s(A_GLOB),
+		    .attr = attr,
 		    .mode = mode ? mode : dummy,
 		    .user = user ? user : dummy,
 		    .group = group ? group : dummy,
