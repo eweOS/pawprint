@@ -33,12 +33,14 @@ without `--log` option.
 
 These types are supported in the configuration file:
 
-- `q` & `Q` (see [Known Issues](#known-issues))
-- `w`
 - `f`
+- `w`
 - `d` & `D`
-- `h`
+- `r`
+- `q` & `Q` (see [Known Issues](#known-issues))
 - `x`
+- `z`
+- `h`
 - `!` (modifier)
 
 ## Known Issues
