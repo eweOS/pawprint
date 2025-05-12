@@ -44,7 +44,8 @@ These types are supported in the configuration file:
 ## Known Issues
 
 - `Q` and `q` types won't create a subvolume even if possible
-- Specifiers are **NOT** recognised
+- Modifiers other than '!' are not recognised
+- Will follow symlink even if `tmpfiles.d(5)` says otherwise
 
 ## About
 
