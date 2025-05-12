@@ -200,6 +200,9 @@ static void glob_match(const char *pattern,
 	return;
 }
 
+typedef void (*attr_handler_t)(const char *path, const char *mode,
+			     const char *user, const char *group,
+			     const char *age, const char *arg);
 #define def_handler(name)                                                      \
 	static void name(const char *path, const char *mode, const char *user, \
 			 const char *group, const char *age, const char *arg)
@@ -490,10 +493,7 @@ struct process_file_info {
  */
 static void process_file(const char *path, void *ctx)
 {
-	typedef void (*attr_handler)(const char *path, const char *mode,
-				     const char *user, const char *group,
-				     const char *age, const char *arg);
-	static attr_handler handlers[] = {
+	static attr_handler_t handlers[] = {
 	    [A_CREATE] = attr_create,
 	    // [A_APPEND] = attr_append,
 
