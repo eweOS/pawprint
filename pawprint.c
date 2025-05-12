@@ -537,6 +537,7 @@ static void parse_conf(FILE *conf)
 	    ['Q'] = s(A_CREATE_DIR) | s(A_OWNER) | s(A_PERM) | s(A_CLEAN) |
 		    s(A_REMOVE),
 	    ['x'] = s(A_EXCLUDE),
+	    ['z'] = s(A_OWNER) | s(A_PERM) | s(A_GLOB),
 	    ['h'] = s(A_ATTR) | s(A_GLOB),
 	};
 
