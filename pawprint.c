@@ -486,11 +486,6 @@ struct process_file_info {
 	const char *mode, *user, *group, *age, *arg;
 };
 
-/*
- * The order in array ctx is important:
- *    attr, mode, user, group, age, arg
- * All are in the same size as a normal pointer
- */
 static void process_file(const char *path, void *ctx)
 {
 	static attr_handler_t handlers[] = {
