@@ -518,17 +518,17 @@ static void process_file(const char *path, void *ctx)
 static void parse_conf(FILE *conf)
 {
 	static entry_attr_t attr_table_type[256] = {
-	    ['w'] = ATTR_WRITE,
 	    ['f'] = ATTR_CREATE | ATTR_WRITE | ATTR_OWNERSHIP | ATTR_PERM,
+	    ['w'] = ATTR_WRITE,
 	    ['d'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
-	    ['r'] = ATTR_REMOVE | ATTR_GLOB,
 	    ['D'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN |
 		    ATTR_REMOVE,
+	    ['r'] = ATTR_REMOVE | ATTR_GLOB,
 	    ['q'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN,
 	    ['Q'] = ATTR_CREATEDIR | ATTR_OWNERSHIP | ATTR_PERM | ATTR_CLEAN |
 		    ATTR_REMOVE,
-	    ['h'] = ATTR_ATTR | ATTR_GLOB,
 	    ['x'] = ATTR_EXCLUDE,
+	    ['h'] = ATTR_ATTR | ATTR_GLOB,
 	};
 
 	while (!feof(conf)) {
